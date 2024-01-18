@@ -178,7 +178,7 @@ public class SQLDatasource {
                     TransactionResourceManager.getInstance()
                             .beginXATransaction(globalTxId, currentTxBlockId, xaResource);
                     conn = xaConn.getConnection();
-                    txContext = new SQLTransactionContext(conn, xaResource);
+                    txContext = new SQLTransactionContext(conn, xaResource, xaConn, datasource);
                 } else if (isXAConnection) {
                     TransactionResourceManager.getInstance()
                             .beginXATransaction(globalTxId, currentTxBlockId, null);
@@ -246,7 +246,7 @@ public class SQLDatasource {
         return hikariDataSource.getConnection();
     }
 
-    private XAConnection getXAConnection() throws SQLException {
+    public XAConnection getXAConnection() throws SQLException {
         if (isXADataSource()) {
             return xaDataSource.getXAConnection();
         }

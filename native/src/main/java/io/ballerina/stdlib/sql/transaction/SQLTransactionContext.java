@@ -20,10 +20,13 @@ package io.ballerina.stdlib.sql.transaction;
 import io.ballerina.runtime.api.creators.ErrorCreator;
 import io.ballerina.runtime.api.utils.StringUtils;
 import io.ballerina.runtime.transactions.BallerinaTransactionContext;
+import io.ballerina.stdlib.sql.datasource.SQLDatasource;
 
 import java.sql.Connection;
 import java.sql.SQLException;
 
+import javax.sql.XAConnection;
+import javax.transaction.xa.XAException;
 import javax.transaction.xa.XAResource;
 
 /**
@@ -34,10 +37,20 @@ import javax.transaction.xa.XAResource;
 public class SQLTransactionContext implements BallerinaTransactionContext {
     private Connection conn;
     private XAResource xaResource;
+    private SQLDatasource dataSource;
+    private XAConnection xaConnection;
 
     public SQLTransactionContext(Connection conn, XAResource resource) {
         this.conn = conn;
         this.xaResource = resource;
+    }
+
+    public SQLTransactionContext(Connection conn, XAResource resource, XAConnection xaConnection,
+                                 SQLDatasource dataSource) {
+        this.conn = conn;
+        this.xaResource = resource;
+        this.xaConnection = xaConnection;
+        this.dataSource = dataSource;
     }
 
     public SQLTransactionContext(Connection conn) {
@@ -82,5 +95,44 @@ public class SQLTransactionContext implements BallerinaTransactionContext {
     @Override
     public XAResource getXAResource() {
         return this.xaResource;
+    }
+
+//    @Override
+    public void refreshXAResource() {
+        try{
+            if (this.xaResource != null) {
+                assertConnectionIsStillAlive();
+            } else {
+                forceRefreshXAConnection();
+            }
+        } catch (XAException e) {
+            throw ErrorCreator.createError(StringUtils.fromString("XAException occurred:" + e.getMessage()));
+        }
+    }
+
+    private void assertConnectionIsStillAlive() throws XAException {
+        this.xaResource.isSameRM(this.xaResource);
+    }
+
+    private void forceRefreshXAConnection() throws XAException {
+        XAResource xaResource = null;
+
+        if ( this.xaConnection != null ) {
+            try {
+                this.xaConnection.close ();
+            } catch ( Exception err ) {
+                // connection timed out, ignore.
+            }
+        }
+
+        try {
+            this.xaConnection = this.dataSource.getXAConnection();
+            if ( this.xaConnection != null )
+                xaResource = this.xaConnection.getXAResource();
+        } catch ( SQLException sql ) {
+            System.out.println("Failed to refresh XAConnection: " + sql.getMessage());
+        }
+
+        this.xaResource = xaResource;
     }
 }
